@@ -22,6 +22,7 @@ import {
   Message as MessageType,
   Part as PartType,
   ReasoningPart,
+  SessionRefPart,
   TextPart,
   ToolPart,
   UserMessage,
@@ -939,6 +940,8 @@ export function UserMessageDisplay(props: {
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
+  const sessionRefs = createMemo(() => (props.parts?.filter((p) => p.type === "session-ref") as SessionRefPart[]) ?? [])
+
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
     const modelID = props.message.model?.modelID
@@ -1119,6 +1122,22 @@ export function UserMessageDisplay(props: {
             </Tooltip>
           </div>
         </>
+      </Show>
+      <Show when={sessionRefs().length > 0}>
+        <For each={sessionRefs()}>
+          {(ref) => (
+            <details data-slot="user-message-session-ref" class="mt-1 text-12-regular text-text-weak">
+              <summary class="cursor-pointer select-none flex items-center gap-1.5">
+                <Icon name="speech-bubble" size="small" class="text-icon-weak" />
+                <span>
+                  Referenced session "{ref.title}" ({ref.shown}/{ref.total} messages
+                  {ref.shown < ref.total ? ", truncated" : ""})
+                </span>
+              </summary>
+              <pre class="mt-1 whitespace-pre-wrap break-words text-text-weak opacity-80">{ref.text}</pre>
+            </details>
+          )}
+        </For>
       </Show>
     </div>
   )

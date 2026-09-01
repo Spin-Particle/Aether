@@ -213,6 +213,18 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const SessionRefPart = PartBase.extend({
+    type: z.literal("session-ref"),
+    refID: SessionID.zod,
+    title: z.string(),
+    total: z.number(),
+    shown: z.number(),
+    text: z.string(),
+  }).meta({
+    ref: "SessionRefPart",
+  })
+  export type SessionRefPart = z.infer<typeof SessionRefPart>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
@@ -394,6 +406,7 @@ export namespace MessageV2 {
       AgentPart,
       RetryPart,
       CompactionPart,
+      SessionRefPart,
     ])
     .meta({
       ref: "Part",
@@ -677,6 +690,12 @@ export namespace MessageV2 {
             userMessage.parts.push({
               type: "text",
               text: "The following tool was executed by the user",
+            })
+          }
+          if (part.type === "session-ref") {
+            userMessage.parts.push({
+              type: "text",
+              text: part.text,
             })
           }
         }

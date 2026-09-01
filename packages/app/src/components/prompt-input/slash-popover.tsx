@@ -6,6 +6,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 export type AtOption =
   | { type: "agent"; name: string; display: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
+  | { type: "session"; id: string; display: string }
 
 export interface SlashCommand {
   id: string
@@ -65,6 +66,22 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                       >
                         <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
                         <span class="text-14-regular text-text-strong whitespace-nowrap">@{item.name}</span>
+                      </button>
+                    )
+                  }
+
+                  if (item.type === "session") {
+                    return (
+                      <button
+                        class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
+                        classList={{ "bg-surface-raised-base-hover": props.atActive === key }}
+                        onClick={() => props.onAtSelect(item)}
+                        onMouseEnter={() => props.setAtActive(key)}
+                      >
+                        <Icon name="speech-bubble" size="small" class="text-icon-weak shrink-0" />
+                        <span class="text-14-regular text-text-strong whitespace-nowrap truncate min-w-0">
+                          {item.display}
+                        </span>
                       </button>
                     )
                   }

@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { useSync } from "@/context/sync"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
@@ -37,6 +38,7 @@ type PromptAttachmentsInput = {
 export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
+  const sync = useSync()
 
   const warn = () => {
     showToast({
@@ -176,6 +178,17 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     input.setDraggingType(null)
 
     const plainText = event.dataTransfer?.getData("text/plain")
+    const sessionPrefix = "session:"
+    if (plainText?.startsWith(sessionPrefix)) {
+      input.focusEditor()
+      const id = plainText.slice(sessionPrefix.length).trim()
+      if (id) {
+        const title = sync.data.session.find((session) => session.id === id)?.title ?? id
+        input.addPart({ type: "session", id, title, content: "@" + id, start: 0, end: 0 })
+      }
+      return
+    }
+
     const filePrefix = "file:"
     if (plainText?.startsWith(filePrefix)) {
       input.focusEditor()

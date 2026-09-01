@@ -1037,6 +1037,18 @@ export type CompactionPart = {
   overflow?: boolean
 }
 
+export type SessionRefPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "session-ref"
+  refID: string
+  title: string
+  total: number
+  shown: number
+  text: string
+}
+
 export type Part =
   | TextPart
   | SubtaskPart
@@ -1050,6 +1062,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | SessionRefPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"

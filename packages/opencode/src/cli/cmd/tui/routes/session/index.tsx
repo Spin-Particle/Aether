@@ -1259,6 +1259,7 @@ function UserMessage(props: {
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+  const refs = createMemo(() => props.parts.flatMap((x) => (x.type === "session-ref" ? [x] : [])))
 
   return (
     <>
@@ -1322,6 +1323,23 @@ function UserMessage(props: {
             </Show>
           </box>
         </box>
+      </Show>
+      <Show when={refs().length}>
+        <For each={refs()}>
+          {(ref) => (
+            <box
+              border={["left"]}
+              borderColor={color()}
+              customBorderChars={SplitBorder.customBorderChars}
+              marginTop={text() ? 0 : props.index === 0 ? 0 : 1}
+            >
+              <text fg={theme.textMuted} paddingLeft={2}>
+                ↳ referenced session "{ref.title}" ({ref.shown}/{ref.total} messages
+                {ref.shown < ref.total ? ", truncated" : ""})
+              </text>
+            </box>
+          )}
+        </For>
       </Show>
       <Show when={compaction()}>
         <box

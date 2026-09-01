@@ -16,6 +16,7 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  SessionMentionPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -649,13 +650,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
-    } else {
-      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+      return
     }
+    if (option.type === "session") {
+      addPart({ type: "session", id: option.id, title: option.display, content: "@" + option.id, start: 0, end: 0 })
+      return
+    }
+    addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
   }
+
+  const sessionList = createMemo(() =>
+    sync.data.session
+      .filter((session) => session.id !== params.id && !session.time.archived)
+      .sort((a, b) => b.time.updated - a.time.updated)
+      .slice(0, 50)
+      .map((session): AtOption => ({ type: "session", id: session.id, display: session.title })),
+  )
 
   const atKey = (x: AtOption | undefined) => {
     if (!x) return ""
+    if (x.type === "session") return `session:${x.id}`
     return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
   }
 
@@ -668,6 +682,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
+      const sessions = sessionList()
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
@@ -675,20 +690,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions]
+      return [...agents, ...sessions, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
+      if (item.type === "session") return "session"
       if (item.recent) return "recent"
       return "file"
     },
     sortGroupsBy: (a, b) => {
       const rank = (category: string) => {
         if (category === "agent") return 0
-        if (category === "recent") return 1
-        return 2
+        if (category === "session") return 1
+        if (category === "recent") return 2
+        return 3
       }
       return rank(a.category) - rank(b.category)
     },
@@ -750,12 +767,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
+  const createPill = (part: FileAttachmentPart | AgentPart | SessionMentionPart) => {
     const pill = document.createElement("span")
-    pill.textContent = part.content
+    pill.textContent = part.type === "session" ? "@" + part.title : part.content
     pill.setAttribute("data-type", part.type)
     if (part.type === "file") pill.setAttribute("data-path", part.path)
     if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "session") {
+      pill.setAttribute("data-id", part.id)
+      pill.setAttribute("data-title", part.title)
+    }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -778,6 +799,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") return true
       if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "session") return true
       return el.tagName === "BR"
     })
 
@@ -788,7 +810,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.appendChild(createTextFragment(part.content))
         continue
       }
-      if (part.type === "file" || part.type === "agent") {
+      if (part.type === "file" || part.type === "agent" || part.type === "session") {
         editorRef.appendChild(createPill(part))
       }
     }
@@ -907,6 +929,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushSession = (pill: HTMLElement) => {
+      const id = pill.dataset.id!
+      const content = "@" + id
+      parts.push({
+        type: "session",
+        id,
+        title: pill.dataset.title ?? id,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -923,6 +959,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "session") {
+        flushText()
+        pushSession(el)
         return
       }
       if (el.tagName === "BR") {
@@ -1014,7 +1055,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const range = selection.getRangeAt(0)
     if (!editorRef.contains(range.startContainer)) return false
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type === "file" || part.type === "agent" || part.type === "session") {
       const cursorPosition = getCursorPosition(editorRef)
       const rawText = prompt
         .current()

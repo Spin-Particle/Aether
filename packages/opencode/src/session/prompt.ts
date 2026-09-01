@@ -1039,6 +1039,71 @@ export namespace SessionPrompt {
     })
   }
 
+  const SESSION_REF = /@(ses_[0-9a-zA-Z]+)/g
+  const SESSION_REF_LIMIT = { messages: 60, chars: 40_000 }
+
+  async function sessionRef(
+    ref: string,
+    self: SessionID,
+    messageID: MessageID,
+  ): Promise<(Omit<MessageV2.SessionRefPart, "id"> | Omit<MessageV2.TextPart, "id">)[]> {
+    const note = (text: string): [Omit<MessageV2.TextPart, "id">] => [
+      { messageID, sessionID: self, type: "text", synthetic: true, text },
+    ]
+    const refID = SessionID.make(ref)
+    if (refID === self) return note(`Session reference @${ref} points to the current session and was skipped.`)
+    const session = await Session.get(refID).catch(() => undefined)
+    if (!session) return note(`Session reference @${ref} could not be found and was skipped.`)
+    const msgs = await Session.messages({ sessionID: refID })
+    const entries = msgs.flatMap((msg) => {
+      const role = msg.info.role === "user" ? "User" : msg.info.role === "assistant" ? "Assistant" : undefined
+      if (!role) return []
+      const text = msg.parts
+        .filter(
+          (part): part is MessageV2.TextPart =>
+            part.type === "text" &&
+            !part.ignored &&
+            (role === "Assistant" || !part.synthetic) &&
+            part.text.trim().length > 0,
+        )
+        .map((part) => part.text.trim())
+        .join("\n")
+      return text ? [{ role, text }] : []
+    })
+    const total = entries.length
+    if (total === 0)
+      return note(`Session reference @${ref} (${session.title}) contains no user/assistant text messages.`)
+    const kept: typeof entries = []
+    let chars = 0
+    for (const entry of [...entries].reverse()) {
+      if (kept.length >= SESSION_REF_LIMIT.messages) break
+      if (kept.length > 0 && chars + entry.text.length > SESSION_REF_LIMIT.chars) break
+      kept.push(entry)
+      chars += entry.text.length
+    }
+    kept.reverse()
+    const truncated = kept.length < total
+    const title = session.title.replace(/"/g, "'")
+    const text = [
+      `<referenced_session id="${ref}" title="${title}" messages="${kept.length}/${total}"${truncated ? ' truncated="true"' : ""}>`,
+      ...(truncated ? [`(Showing the most recent ${kept.length} of ${total} messages)`] : []),
+      ...kept.map((entry) => `[${entry.role}]: ${entry.text}`),
+      "</referenced_session>",
+    ].join("\n\n")
+    return [
+      {
+        messageID,
+        sessionID: self,
+        type: "session-ref",
+        refID,
+        title: session.title,
+        total,
+        shown: kept.length,
+        text,
+      },
+    ]
+  }
+
   async function createUserMessage(input: PromptInput) {
     const pref = SessionPreference.get(input.sessionID)
     const agentName = input.agent || pref?.agent || (await Agent.defaultAgent())
@@ -1423,6 +1488,16 @@ export namespace SessionPrompt {
                 hint,
             },
           ]
+        }
+
+        if (part.type === "text") {
+          const refs = [...new Set([...part.text.matchAll(SESSION_REF)].map((match) => match[1]))]
+          const base = { ...part, messageID: info.id, sessionID: input.sessionID }
+          if (refs.length === 0) return [base]
+          const extra = await Promise.all(refs.map((ref) => sessionRef(ref, input.sessionID, info.id))).then((x) =>
+            x.flat(),
+          )
+          return [base, ...extra]
         }
 
         return [

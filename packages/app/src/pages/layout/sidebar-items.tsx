@@ -187,6 +187,11 @@ const SessionRow = (props: {
 }): JSX.Element => (
   <A
     href={sessionHref(props.slug, props.targetSession)}
+    draggable={!props.selectMode?.()}
+    onDragStart={(event) => {
+      event.dataTransfer?.setData("text/plain", `session:${props.session.id}`)
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+    }}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-14" : ""} group-hover/session:pr-14 group-focus-within/session:pr-14 group-active/session:pr-14 ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}

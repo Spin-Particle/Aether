@@ -218,6 +218,37 @@ export function Autocomplete(props: {
     }
   }
 
+  function insertMention(text: string) {
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const charAfterCursor = props.value.at(currentCursorOffset)
+    const append = "@" + text + (charAfterCursor !== " " ? " " : "")
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(append)
+  }
+
+  const sessions = createMemo((): AutocompleteOption[] => {
+    if (!store.visible || store.visible === "/") return []
+    const width = props.anchor().width - 4
+    return sync.data.session
+      .filter((session) => session.id !== props.sessionID && !session.time.archived)
+      .sort((a, b) => b.time.updated - a.time.updated)
+      .slice(0, 50)
+      .map((session) => ({
+        display: Locale.truncateMiddle(`session: ${session.title}`, width),
+        value: `${session.title} ${session.id}`,
+        description: session.id,
+        onSelect: () => insertMention(session.id),
+      }))
+  })
+
   const [files] = createResource(
     () => search(),
     async (query) => {
@@ -388,7 +419,9 @@ export function Autocomplete(props: {
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...agentsValue, ...sessions(), ...(filesValue || []), ...mcpResources()]
+        : [...commandsValue]
 
     const searchValue = search()
 
